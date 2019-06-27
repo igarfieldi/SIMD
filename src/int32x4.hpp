@@ -1,11 +1,10 @@
 #pragma once
 
-#include "base_types.hpp"
-#include "simd.hpp"
 #include <array>
-#include <assert.h>
 #include <cstdint>
 #include <exception>
+#include "base_types.hpp"
+#include "simd.hpp"
 
 namespace simd {
 
@@ -20,6 +19,8 @@ namespace simd {
 		vector() : vector_base() {}
 		explicit vector(native_type v) : vector_base(v) {}
 		explicit vector(type f) : vector_base(_mm_set1_epi32(f)) {}
+		explicit vector(type f1, type f2, type f3, type f4) : vector_base(_mm_set_epi32(f4, f3, f2, f1)) {}
+		explicit vector(const std::array<type, width>& arr) : vector_base(_mm_set_epi32(arr[3], arr[2], arr[1], arr[0])) {}
 #if SIMD_SUPPORTS(SIMD_SSE3)
 		explicit vector(const type *vals) : vector_base(_mm_lddqu_si128(reinterpret_cast<const native_type *>(vals))) {}
 #else // SIMD_SUPPORTS(SIMD_SSE3)
@@ -71,9 +72,39 @@ namespace simd {
 		friend vector<std::int32_t, 4> min(const vector<std::int32_t, 4> &v1, const vector<std::int32_t, 4> &v2);
 		friend vector<std::int32_t, 4> max(const vector<std::int32_t, 4> &v1, const vector<std::int32_t, 4> &v2);
 
-		friend vector<std::int32_t, 4> select(const vector<std::int32_t, 4> &v, const vector<std::int32_t, 4> &alt, const vector<std::int32_t, 4> &condition);
+		friend vector<std::int32_t, 4> select(const vector<std::int32_t, 4> &v, const vector<std::int32_t, 4> &alt, const mask<std::int32_t, 4> &condition);
 
 		friend std::ostream &operator<<(std::ostream &stream, const vector<std::int32_t, 4> &v);
+	};
+
+	template <>
+	class mask<std::int32_t, 4> : public vector_base<std::int32_t, 4> {
+	public:
+		SIMD_FORCEINLINE mask() : vector_base() {}
+		explicit SIMD_FORCEINLINE mask(native_type v) : vector_base(v) {}
+		explicit SIMD_FORCEINLINE mask(bool b) : vector_base(_mm_set1_epi32(-static_cast<int>(b))) {}
+		explicit SIMD_FORCEINLINE mask(bool b1, bool b2, bool b3, bool b4) : vector_base(_mm_set_epi32(
+			-static_cast<int>(b4), -static_cast<int>(b3), -static_cast<int>(b2), -static_cast<int>(b1))) {}
+		explicit SIMD_FORCEINLINE mask(const std::array<bool, width>& arr) : mask(arr[3], arr[2], arr[1], arr[0]) {}
+		explicit SIMD_FORCEINLINE mask(const vector<std::int32_t, 4> & v) : vector_base(v) {}
+
+		friend SIMD_FORCEINLINE mask<std::int32_t, 4> operator==(const mask<std::int32_t, 4> & v1, const mask<std::int32_t, 4> & v2);
+		friend SIMD_FORCEINLINE mask<std::int32_t, 4> operator!=(const mask<std::int32_t, 4> & v1, const mask<std::int32_t, 4> & v2);
+
+		SIMD_FORCEINLINE mask<std::int32_t, 4> & operator&=(const mask<std::int32_t, 4> & v);
+		SIMD_FORCEINLINE mask<std::int32_t, 4> & operator|=(const mask<std::int32_t, 4> & v);
+		SIMD_FORCEINLINE mask<std::int32_t, 4> & operator^=(const mask<std::int32_t, 4> & v);
+
+		friend SIMD_FORCEINLINE mask<std::int32_t, 4> operator~(const mask<std::int32_t, 4> & v);
+		friend SIMD_FORCEINLINE mask<std::int32_t, 4> operator&(mask<std::int32_t, 4> v1, const mask<std::int32_t, 4> & v2);
+		friend SIMD_FORCEINLINE mask<std::int32_t, 4> operator|(mask<std::int32_t, 4> v1, const mask<std::int32_t, 4> & v2);
+		friend SIMD_FORCEINLINE mask<std::int32_t, 4> operator^(mask<std::int32_t, 4> v1, const mask<std::int32_t, 4> & v2);
+		friend SIMD_FORCEINLINE mask<std::int32_t, 4> andnot(const mask<std::int32_t, 4> & v1, const mask<std::int32_t, 4> & v2);
+
+		SIMD_FORCEINLINE int get_mask() const;
+		SIMD_FORCEINLINE bool all() const;
+		SIMD_FORCEINLINE bool any() const;
+		SIMD_FORCEINLINE bool none() const;
 	};
 
 	vector<std::int32_t, 4> &vector<std::int32_t, 4>::operator+=(const vector<std::int32_t, 4> &v) {
@@ -255,12 +286,12 @@ namespace simd {
 #endif // SIMD_SUPPORTS(SIMD_SSE3)
 	}
 
-	vector<std::int32_t, 4> select(const vector<std::int32_t, 4> &v, const vector<std::int32_t, 4> &alt, const vector<std::int32_t, 4> &condition) {
+	vector<std::int32_t, 4> select(const vector<std::int32_t, 4> &v, const vector<std::int32_t, 4> &alt, const mask<std::int32_t, 4> &condition) {
 		// TODO: this only works when mask is either 0 or -1 (because it's byte-wise)
 #if SIMD_SUPPORTS(SIMD_SSE4_1)
-		return vector<std::int32_t, 4>(_mm_blendv_epi8(alt.m_vec, v.m_vec, condition.m_vec));
+		return vector<std::int32_t, 4>(_mm_blendv_epi8(alt.m_vec, v.m_vec, condition.native()));
 #else // SIMD_SUPPORTS(SIMD_SSE4_1)
-		return vector<std::int32_t, 4>(_mm_or_si128(_mm_and_si128(v.m_vec, condition.m_vec), _mm_andnot_si128(alt.m_vec, condition.m_vec)));
+		return vector<std::int32_t, 4>(_mm_or_si128(_mm_and_si128(v.m_vec, condition.native()), _mm_andnot_si128(alt.m_vec, condition.native())));
 #endif // SIMD_SUPPORTS(SIMD_SSE4_1)
 	}
 
@@ -272,6 +303,68 @@ namespace simd {
 		stream << v.m_array[v.width - 1] << ')';
 		return stream;
 	}
+
+	mask<std::int32_t, 4> operator==(const mask<std::int32_t, 4> & v1, const mask<std::int32_t, 4> & v2) {
+		return mask<std::int32_t, 4>(_mm_cmpeq_epi32(v1.m_vec, v2.m_vec));
+	}
+
+	mask<std::int32_t, 4> operator!=(const mask<std::int32_t, 4> & v1, const mask<std::int32_t, 4> & v2) {
+		// Invert because SSE doesn't have instruction for it
+		return mask<std::int32_t, 4>(_mm_xor_si128(_mm_cmpeq_epi32(v1.m_vec, v2.m_vec), _mm_set1_epi32(-1)));
+	}
+
+	mask<std::int32_t, 4> & mask<std::int32_t, 4>::operator&=(const mask<std::int32_t, 4> & v) {
+		m_vec = _mm_and_si128(m_vec, v.m_vec);
+		return *this;
+	}
+
+	mask<std::int32_t, 4> & mask<std::int32_t, 4>::operator|=(const mask<std::int32_t, 4> & v) {
+		m_vec = _mm_or_si128(m_vec, v.m_vec);
+		return *this;
+	}
+
+	mask<std::int32_t, 4> & mask<std::int32_t, 4>::operator^=(const mask<std::int32_t, 4> & v) {
+		m_vec = _mm_xor_si128(m_vec, v.m_vec);
+		return *this;
+	}
+
+	mask<std::int32_t, 4> operator~(const mask<std::int32_t, 4> & v) {
+		return mask<std::int32_t, 4>(_mm_xor_si128(v.m_vec, _mm_set1_epi32(-1)));
+	}
+
+	mask<std::int32_t, 4> operator&(mask<std::int32_t, 4> v1, const mask<std::int32_t, 4> & v2) {
+		return v1 &= v2;
+	}
+
+	mask<std::int32_t, 4> operator|(mask<std::int32_t, 4> v1, const mask<std::int32_t, 4> & v2) {
+		return v1 |= v2;
+	}
+
+	mask<std::int32_t, 4> operator^(mask<std::int32_t, 4> v1, const mask<std::int32_t, 4> & v2) {
+		return v1 ^= v2;
+	}
+
+	mask<std::int32_t, 4> andnot(const mask<std::int32_t, 4> & v1, const mask<std::int32_t, 4> & v2) {
+		return mask<std::int32_t, 4>(_mm_andnot_si128(v1.m_vec, v2.m_vec));
+	}
+
+	int mask<std::int32_t, 4>::get_mask() const {
+		return _mm_movemask_epi8(m_vec);
+	}
+
+	bool mask<std::int32_t, 4>::all() const {
+		// TODO: what is faster here?
+		return _mm_movemask_epi8(m_vec) == 0b1111111111111111;
+	}
+
+	bool mask<std::int32_t, 4>::any() const {
+		return _mm_movemask_epi8(m_vec);
+	}
+
+	bool mask<std::int32_t, 4>::none() const {
+		return !_mm_movemask_epi8(m_vec);
+	}
+
 #endif // SIMD_SUPPORTS(SIMD_SSE2)
 
 } // namespace simd

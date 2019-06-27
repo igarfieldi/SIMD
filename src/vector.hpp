@@ -1,10 +1,10 @@
 #pragma once
 
+#include <array>
+#include <cassert>
+#include <ostream>
 #include "base_types.hpp"
 #include "util.hpp"
-#include <array>
-#include <assert.h>
-#include <ostream>
 
 namespace simd {
 

@@ -1,10 +1,9 @@
 #pragma once
 
+#include <array>
+#include <exception>
 #include "base_types.hpp"
 #include "simd.hpp"
-#include <array>
-#include <assert.h>
-#include <exception>
 
 namespace simd {
 
@@ -20,6 +19,8 @@ namespace simd {
 		vector() : vector_base() {}
 		explicit vector(native_type v) : vector_base(v) {}
 		explicit vector(type f) : vector_base(_mm256_set1_pd(f)) {}
+		explicit vector(type f1, type f2, type f3, type f4) : vector_base(_mm256_set_pd(f4, f3, f2, f1)) {}
+		explicit vector(const std::array<type, width>& arr) : vector_base(_mm256_set_pd(arr[3], arr[2], arr[1], arr[0])) {}
 		explicit vector(const type *vals) : vector_base(_mm256_loadu_pd(vals)) {}
 		explicit vector(const type *vals, aligned_load) : vector_base(_mm256_load_pd(vals)) {}
 		explicit vector(const vector<int, 4> &v);
@@ -70,9 +71,39 @@ namespace simd {
 		vector<double, 4> sqrt() const;
 		vector<double, 4> rsqrt() const;
 
-		friend vector<double, 4> select(const vector<double, 4> &v, const vector<double, 4> &alt, const vector<double, 4> &condition);
+		friend vector<double, 4> select(const vector<double, 4> &v, const vector<double, 4> &alt, const mask<double, 4> &condition);
 
 		friend std::ostream &operator<<(std::ostream &stream, const vector<double, 4> &v);
+	};
+
+	template <>
+	class mask<double, 4> : public vector_base<double, 4> {
+	public:
+		SIMD_FORCEINLINE mask() : vector_base() {}
+		explicit SIMD_FORCEINLINE mask(native_type v) : vector_base(v) {}
+		explicit SIMD_FORCEINLINE mask(bool b) : vector_base(_mm256_castsi256_pd(_mm256_set1_epi64x(-static_cast<int>(b)))) {}
+		explicit SIMD_FORCEINLINE mask(bool b1, bool b2, bool b3, bool b4) : vector_base(_mm256_castsi256_pd(_mm256_set_epi64x(
+			-static_cast<int>(b4), -static_cast<int>(b3), -static_cast<int>(b2), -static_cast<int>(b1)))) {}
+		explicit SIMD_FORCEINLINE mask(const std::array<bool, width>& arr) : mask(arr[3], arr[2], arr[1], arr[0]) {}
+		explicit SIMD_FORCEINLINE mask(const vector<double, 4> & v) : vector_base(v) {}
+
+		friend SIMD_FORCEINLINE mask<double, 4> operator==(const mask<double, 4> & v1, const mask<double, 4> & v2);
+		friend SIMD_FORCEINLINE mask<double, 4> operator!=(const mask<double, 4> & v1, const mask<double, 4> & v2);
+
+		SIMD_FORCEINLINE mask<double, 4> & operator&=(const mask<double, 4> & v);
+		SIMD_FORCEINLINE mask<double, 4> & operator|=(const mask<double, 4> & v);
+		SIMD_FORCEINLINE mask<double, 4> & operator^=(const mask<double, 4> & v);
+
+		friend SIMD_FORCEINLINE mask<double, 4> operator~(const mask<double, 4> & v);
+		friend SIMD_FORCEINLINE mask<double, 4> operator&(mask<double, 4> v1, const mask<double, 4> & v2);
+		friend SIMD_FORCEINLINE mask<double, 4> operator|(mask<double, 4> v1, const mask<double, 4> & v2);
+		friend SIMD_FORCEINLINE mask<double, 4> operator^(mask<double, 4> v1, const mask<double, 4> & v2);
+		friend SIMD_FORCEINLINE mask<double, 4> andnot(const mask<double, 4> & v1, const mask<double, 4> & v2);
+
+		SIMD_FORCEINLINE int get_mask() const;
+		SIMD_FORCEINLINE bool all() const;
+		SIMD_FORCEINLINE bool any() const;
+		SIMD_FORCEINLINE bool none() const;
 	};
 
 	vector<double, 4> &vector<double, 4>::operator+=(const vector<double, 4> &v) {
@@ -264,8 +295,8 @@ namespace simd {
 		return v.round(mode);
 	}
 
-	vector<double, 4> select(const vector<double, 4> &v, const vector<double, 4> &alt, const vector<double, 4> &condition) {
-		return vector<double, 4>(_mm256_blendv_pd(alt.m_vec, v.m_vec, condition.m_vec));
+	vector<double, 4> select(const vector<double, 4> &v, const vector<double, 4> &alt, const mask<double, 4> &condition) {
+		return vector<double, 4>(_mm256_blendv_pd(alt.m_vec, v.m_vec, condition.native()));
 	}
 
 	std::ostream &operator<<(std::ostream &stream, const vector<double, 4> &v) {
@@ -276,6 +307,67 @@ namespace simd {
 		stream << v.m_array[v.width - 1] << ')';
 		return stream;
 	}
+
+	mask<double, 4> operator==(const mask<double, 4> & v1, const mask<double, 4> & v2) {
+		return mask<double, 4>(_mm256_cmp_pd(v1.m_vec, v2.m_vec, _CMP_EQ_OQ));
+	}
+
+	mask<double, 4> operator!=(const mask<double, 4> & v1, const mask<double, 4> & v2) {
+		return mask<double, 4>(_mm256_cmp_pd(v1.m_vec, v2.m_vec, _CMP_NEQ_OQ));
+	}
+
+	mask<double, 4> & mask<double, 4>::operator&=(const mask<double, 4> & v) {
+		m_vec = _mm256_and_pd(m_vec, v.m_vec);
+		return *this;
+	}
+
+	mask<double, 4> & mask<double, 4>::operator|=(const mask<double, 4> & v) {
+		m_vec = _mm256_or_pd(m_vec, v.m_vec);
+		return *this;
+	}
+
+	mask<double, 4> & mask<double, 4>::operator^=(const mask<double, 4> & v) {
+		m_vec = _mm256_xor_pd(m_vec, v.m_vec);
+		return *this;
+	}
+
+	mask<double, 4> operator~(const mask<double, 4> & v) {
+		return mask<double, 4>(_mm256_xor_pd(v.m_vec, _mm256_castsi256_pd(_mm256_set1_epi64x(-1))));
+	}
+
+	mask<double, 4> operator&(mask<double, 4> v1, const mask<double, 4> & v2) {
+		return v1 &= v2;
+	}
+
+	mask<double, 4> operator|(mask<double, 4> v1, const mask<double, 4> & v2) {
+		return v1 |= v2;
+	}
+
+	mask<double, 4> operator^(mask<double, 4> v1, const mask<double, 4> & v2) {
+		return v1 ^= v2;
+	}
+
+	mask<double, 4> andnot(const mask<double, 4> & v1, const mask<double, 4> & v2) {
+		return mask<double, 4>(_mm256_andnot_pd(v1.m_vec, v2.m_vec));
+	}
+
+	int mask<double, 4>::get_mask() const {
+		return _mm256_movemask_pd(m_vec);
+	}
+
+	bool mask<double, 4>::all() const {
+		// TODO: what is faster here?
+		return _mm256_movemask_pd(m_vec) == 0b1111;
+	}
+
+	bool mask<double, 4>::any() const {
+		return _mm256_movemask_pd(m_vec);
+	}
+
+	bool mask<double, 4>::none() const {
+		return !_mm256_movemask_pd(m_vec);
+	}
+
 #endif // SIMD_SUPPORTS(SIMD_AVX)
 
 } // namespace simd

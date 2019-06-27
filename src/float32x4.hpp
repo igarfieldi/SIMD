@@ -1,11 +1,10 @@
 #pragma once
 
+#include <array>
+#include <exception>
 #include "base_types.hpp"
 #include "simd.hpp"
 #include "util.hpp"
-#include <array>
-#include <assert.h>
-#include <exception>
 
 namespace simd {
 
@@ -21,6 +20,7 @@ namespace simd {
 		explicit SIMD_FORCEINLINE vector(native_type v) : vector_base(v) {}
 		explicit SIMD_FORCEINLINE vector(type f) : vector_base(_mm_set1_ps(f)) {}
 		explicit SIMD_FORCEINLINE vector(type f1, type f2, type f3, type f4) : vector_base(_mm_set_ps(f4, f3, f2, f1)) {}
+		explicit SIMD_FORCEINLINE vector(const std::array<type, width>& arr) : vector_base(_mm_set_ps(arr[3], arr[2], arr[1], arr[0])) {}
 		explicit SIMD_FORCEINLINE vector(const type *vals) : vector_base(_mm_loadu_ps(vals)) {}
 		explicit SIMD_FORCEINLINE vector(const type *vals, aligned_load) : vector_base(_mm_load_ps(vals)) {}
 		explicit SIMD_FORCEINLINE vector(const vector<int, 4> &v);
@@ -92,6 +92,7 @@ namespace simd {
 		explicit SIMD_FORCEINLINE mask(bool b) : vector_base(_mm_castsi128_ps(_mm_set1_epi32(-static_cast<int>(b)))) {}
 		explicit SIMD_FORCEINLINE mask(bool b1, bool b2, bool b3, bool b4) : vector_base(_mm_castsi128_ps(_mm_set_epi32(
 			-static_cast<int>(b4), -static_cast<int>(b3), -static_cast<int>(b2), -static_cast<int>(b1)))) {}
+		explicit SIMD_FORCEINLINE mask(const std::array<bool, width>& arr) : mask(arr[3], arr[2], arr[1], arr[0]) {}
 		explicit SIMD_FORCEINLINE mask(const vector<float, 4> &v) : vector_base(v) {}
 
 		friend SIMD_FORCEINLINE mask<float, 4> operator==(const mask<float, 4> &v1, const mask<float, 4> &v2);
@@ -345,11 +346,11 @@ namespace simd {
 	}
 
 	mask<float, 4> operator==(const mask<float, 4> &v1, const mask<float, 4> &v2) {
-		return mask<float, 4>(_mm_cmpeq_ps(v1.m_vec, v2.m_vec));
+		return mask<float, 4>(_mm_cmp_ps(v1.m_vec, v2.m_vec, _CMP_EQ_OQ));
 	}
 
 	mask<float, 4> operator!=(const mask<float, 4> &v1, const mask<float, 4> &v2) {
-		return mask<float, 4>(_mm_cmpeq_ps(v1.m_vec, v2.m_vec));
+		return mask<float, 4>(_mm_cmp_ps(v1.m_vec, v2.m_vec, _CMP_NEQ_OQ));
 	}
 
 	mask<float, 4> &mask<float, 4>::operator&=(const mask<float, 4> &v) {

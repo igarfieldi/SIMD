@@ -59,6 +59,12 @@ namespace simd {
 		static constexpr int required_version = SIMD_AVX2;
 		using native_type = __m256i;
 	};
+
+	template <>
+	struct native_vector<std::int64_t, 4> {
+		static constexpr int required_version = SIMD_AVX2;
+		using native_type = __m256i;
+	};
 #endif // SIMD_SUPPORTS(SIMD_AVX2)
 
 } // namespace simd

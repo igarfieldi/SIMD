@@ -2,8 +2,6 @@
 
 #include <iostream>
 
-namespace simd {
-
 #define SIMD_NONE 0
 #define SIMD_SSE 10
 #define SIMD_SSE2 20
@@ -55,6 +53,8 @@ namespace simd {
 #endif // _MSVC_VER
 
 #define SIMD_SUPPORTS(ver) SIMD_SSE_VERSION >= ver
+
+namespace simd {
 
 	constexpr bool supports(int version) {
 		return SIMD_SUPPORTS(version);
