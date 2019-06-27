@@ -1,0 +1,1 @@
+This is a simple wrapper for vector SIMD types (currently only SSE/AVX; nothing else is really planned). It does precisely that and nothing more and probably offers no real advantage over one of the many SIMD wrappers out there.
